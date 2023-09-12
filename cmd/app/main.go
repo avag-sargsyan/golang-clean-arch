@@ -15,5 +15,13 @@ func main() {
 	// Can be used Google Wire for DI if we have a lot of handlers
 	http.HandleFunc("/users", handler.GetUsers)
 	http.HandleFunc("/user/create", handler.CreateUser)
-	http.ListenAndServe(":8080", nil)
+
+	authService := usecase.NewAuthService()
+	authHandler := controller.NewAuthHandler(authService)
+	http.HandleFunc("/auth/verify", authHandler.Verify)
+
+	err := http.ListenAndServe(":8080", nil)
+	if err != nil {
+		panic(err)
+	}
 }
