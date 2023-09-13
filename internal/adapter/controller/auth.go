@@ -1,12 +1,16 @@
 package controller
 
 import (
+	"encoding/json"
+	"github.com/avag-sargsyan/golang-clean-arch/internal/domain/dto"
 	"github.com/avag-sargsyan/golang-clean-arch/internal/usecase/usecase"
+	"io/ioutil"
 	"net/http"
 )
 
 type Auth interface {
-	Verify(w http.ResponseWriter, r *http.Request)
+	SignIn(w http.ResponseWriter, r *http.Request)
+	GetNonce(w http.ResponseWriter, r *http.Request)
 }
 
 type authHandler struct {
@@ -17,16 +21,50 @@ func NewAuthHandler(s usecase.AuthService) Auth {
 	return &authHandler{service: s}
 }
 
-func (h *authHandler) Verify(w http.ResponseWriter, r *http.Request) {
-	from := "asd"
-	sigHex := "0x34850b7e36e635783df0563c7202c3ac776df59db5015d2" +
-		"b6f0add33955bb5c43ce35efb5ce695a243bc4c5dc4298db4" +
-		"0cd765f3ea5612d2d57da1e4933b2f201b"
-	expected := []byte("Example `personal_sign` message")
-	isValid := h.service.VerifySignature(from, sigHex, expected)
-	if isValid {
-		w.Write([]byte("User verified successfully"))
-	} else {
-		w.Write([]byte("User not verified"))
+func (h *authHandler) SignIn(w http.ResponseWriter, r *http.Request) {
+	//from := "0x41491b64Ed1E61580E18AE93FF1cD83f4533f876"
+	//sigHex := "0xd15743cb446c29b86b15f6ec02b38023c75ddb2e5cb19b3f458e9c01a7fd0d880ba97e26e94fbda7efdea71ae4aca4a5015e03cf3f478a5cc712df687e54e6171b"
+	//expected := []byte("Your unique challenge message here.")
+
+	body, err := ioutil.ReadAll(r.Body)
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
 	}
+
+	var payload *dto.SignInRequest
+	if err := json.Unmarshal(body, &payload); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	isValid := h.service.Verify(payload)
+
+	var response *dto.SignInResponse
+
+	if isValid {
+		response = &dto.SignInResponse{
+			Message: "User verified successfully",
+			Success: true,
+		}
+	} else {
+		response = &dto.SignInResponse{
+			Message: "User not verified",
+			Success: false,
+		}
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+func (h *authHandler) GetNonce(w http.ResponseWriter, r *http.Request) {
+	nonce, err := h.service.GetNonce()
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(&dto.ErrorResponse{Message: "Error"})
+		return
+	}
+	json.NewEncoder(w).Encode(&dto.NonceResponse{Nonce: nonce})
 }

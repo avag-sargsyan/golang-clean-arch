@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sign-in With Ethereum</title>
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.6.0/dist/web3.min.js"></script>
+</head>
+<body>
+
+<h1>Sign-in With Ethereum</h1>
+
+<button id="signButton">Sign-in With Ethereum</button>
+
+<script>
+    let web3;
+    if (window.ethereum) {
+      web3 = new Web3(window.ethereum);
+    } else if (window.web3) {
+      web3 = new Web3(window.web3.currentProvider);
+    } else {
+      alert('No web3 provider detected. Please install MetaMask or another web3 provider.');
+    }
+
+    document.getElementById('signButton').addEventListener('click', async () => {
+        // Request Ethereum accounts
+        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+        const address = accounts[0];
+        const checksummedAddress = web3.utils.toChecksumAddress(address);
+
+        // Fetch chain ID
+        const chainId = await web3.eth.getChainId();
+
+        // Fetch the nonce from the server
+        fetch("/auth/nonce", {
+            method: "GET",
+            headers: {
+                "Content-Type": "application/json"
+            }
+        })
+            .then(response => response.json())
+            .then(async data => {
+                if (data.error) {
+                    console.log("Nonce retrieval failed");
+                    return;
+                }
+
+                // Use the fetched nonce as the challenge message
+                const nonce = data.nonce;
+                console.log(`Nonce successfully retrieved: ${nonce}`);
+
+                // Sign the nonce
+                const signature = await web3.eth.personal.sign(nonce, checksummedAddress, null);
+
+                // Generate timestamps for issuedAt and expiresAt
+                const issuedAt = Math.floor(Date.now() / 1000);
+                const expiresAt = issuedAt + 24 * 60 * 60;
+
+                // Create the message payload (following whatever format you've set for EIP-4361)
+                const message = createMessage(checksummedAddress, nonce, chainId, issuedAt, expiresAt);
+
+                const payload = {
+                    message: message,
+                    signature: signature
+                };
+
+                // Send the signature and message to the server for verification
+                console.log(`Signature: ${signature}, Address: ${checksummedAddress}, Chain ID: ${chainId}`);
+                return fetch("/auth/login", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify(payload)
+                });
+            })
+            .then(response => response ? response.json() : null)
+            .then(data => {
+                if (data && data.success) {
+                    alert("Authentication successful");
+                } else {
+                    alert("Authentication failed");
+                }
+            })
+            .catch(error => {
+                console.error("Error:", error);
+            });
+    });
+
+
+    function createMessage(address, nonce, chainId, issuedAt, expiresAt) {
+        return (
+            "\x19Ethereum Signed Message:\n" + // Required as per EIP-191
+            "Login request for example.app\n" + // Application name
+            "-----\n" +
+            "Address: " + address + "\n" +
+            "Nonce: " + nonce + "\n" +
+            "Chain ID: " + chainId + "\n" +
+            "Issued At: " + issuedAt + "\n" +
+            "Expires At: " + expiresAt + "\n" +
+            "-----\n" +
+            "URI: https://example.app/auth/login" // Application URI
+        );
+    }
+
+</script>
+
+</body>
+</html>

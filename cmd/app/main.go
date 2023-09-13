@@ -18,7 +18,11 @@ func main() {
 
 	authService := usecase.NewAuthService()
 	authHandler := controller.NewAuthHandler(authService)
-	http.HandleFunc("/auth/verify", authHandler.Verify)
+	http.HandleFunc("/auth/login", authHandler.SignIn)
+	http.HandleFunc("/auth/nonce", authHandler.GetNonce)
+
+	fs := http.FileServer(http.Dir("static/"))
+	http.Handle("/static/", http.StripPrefix("/static/", fs))
 
 	err := http.ListenAndServe(":8080", nil)
 	if err != nil {
