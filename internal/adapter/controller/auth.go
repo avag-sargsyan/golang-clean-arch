@@ -2,10 +2,13 @@ package controller
 
 import (
 	"encoding/json"
+	"errors"
 	"github.com/avag-sargsyan/golang-clean-arch/internal/domain/dto"
 	"github.com/avag-sargsyan/golang-clean-arch/internal/usecase/usecase"
 	"io/ioutil"
 	"net/http"
+	"regexp"
+	"time"
 )
 
 type Auth interface {
@@ -22,10 +25,6 @@ func NewAuthHandler(s usecase.AuthService) Auth {
 }
 
 func (h *authHandler) SignIn(w http.ResponseWriter, r *http.Request) {
-	//from := "0x41491b64Ed1E61580E18AE93FF1cD83f4533f876"
-	//sigHex := "0xd15743cb446c29b86b15f6ec02b38023c75ddb2e5cb19b3f458e9c01a7fd0d880ba97e26e94fbda7efdea71ae4aca4a5015e03cf3f478a5cc712df687e54e6171b"
-	//expected := []byte("Your unique challenge message here.")
-
 	body, err := ioutil.ReadAll(r.Body)
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
@@ -36,6 +35,11 @@ func (h *authHandler) SignIn(w http.ResponseWriter, r *http.Request) {
 	var payload *dto.SignInRequest
 	if err := json.Unmarshal(body, &payload); err != nil {
 		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	if err := ValidateSignInRequest(payload); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -59,12 +63,42 @@ func (h *authHandler) SignIn(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *authHandler) GetNonce(w http.ResponseWriter, r *http.Request) {
-	nonce, err := h.service.GetNonce()
+	nonce, userID, err := h.service.GetNonce()
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(&dto.ErrorResponse{Message: "Error"})
 		return
 	}
-	json.NewEncoder(w).Encode(&dto.NonceResponse{Nonce: nonce})
+	json.NewEncoder(w).Encode(&dto.NonceResponse{Nonce: nonce, UserID: userID})
+}
+
+func ValidateSignInRequest(req *dto.SignInRequest) error {
+	// Check if address is a valid Ethereum address
+	if matched, err := regexp.MatchString("^0x[a-fA-F0-9]{40}$", req.Address); err != nil || !matched {
+		return errors.New("invalid Ethereum address")
+	}
+
+	// Validate Chain ID
+	if req.ChainID <= 0 {
+		return errors.New("invalid Chain ID")
+	}
+
+	// Validate signature (you may have more complex logic here)
+	if len(req.Signature) == 0 {
+		return errors.New("signature is required")
+	}
+
+	// Validate Issued At and Expires At
+	if req.IssuedAt > req.ExpiresAt {
+		return errors.New("issuedAt timestamp is later than expiresAt")
+	}
+
+	// Check for expiry
+	currentTime := time.Now().Unix()
+	if currentTime > req.ExpiresAt {
+		return errors.New("the request has expired")
+	}
+
+	return nil
 }

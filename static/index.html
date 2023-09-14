@@ -45,10 +45,9 @@
 
                 // Use the fetched nonce as the challenge message
                 const nonce = data.nonce;
+                const userID = data.user_id;
                 console.log(`Nonce successfully retrieved: ${nonce}`);
-
-                // Sign the nonce
-                const signature = await web3.eth.personal.sign(nonce, checksummedAddress, null);
+                console.log(`User ID: ${userID}`);
 
                 // Generate timestamps for issuedAt and expiresAt
                 const issuedAt = Math.floor(Date.now() / 1000);
@@ -57,9 +56,15 @@
                 // Create the message payload (following whatever format you've set for EIP-4361)
                 const message = createMessage(checksummedAddress, nonce, chainId, issuedAt, expiresAt);
 
+                const signature = await web3.eth.personal.sign(message, checksummedAddress, null);
+
                 const payload = {
-                    message: message,
-                    signature: signature
+                    signature: signature,
+                    address: checksummedAddress,
+                    chainId: chainId,
+                    issuedAt: issuedAt,
+                    expiresAt: expiresAt,
+                    user_id: userID
                 };
 
                 // Send the signature and message to the server for verification
@@ -88,16 +93,16 @@
 
     function createMessage(address, nonce, chainId, issuedAt, expiresAt) {
         return (
-            "\x19Ethereum Signed Message:\n" + // Required as per EIP-191
-            "Login request for example.app\n" + // Application name
-            "-----\n" +
-            "Address: " + address + "\n" +
+            "example.com wants to sign in with your Ethereum account:\n" +
+            address +
+            "\n\n" +
+            "By signing this message, you agree to the terms of use and privacy policy of example.com.\n" +
+            "URI: https://example.com/auth/login\n" +
+            "Version: 1\n" +
             "Nonce: " + nonce + "\n" +
             "Chain ID: " + chainId + "\n" +
             "Issued At: " + issuedAt + "\n" +
-            "Expires At: " + expiresAt + "\n" +
-            "-----\n" +
-            "URI: https://example.app/auth/login" // Application URI
+            "Expires At: " + expiresAt + "\n"
         );
     }
 
